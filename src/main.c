@@ -15,6 +15,7 @@
 #define DEFAULT_LOG_DEST  "syslog"
 #define DEFAULT_LOG_LEVEL LOG_LEVEL_INFO
 
+/* Print command-line usage information. */
 static void usage(const char *prog)
 {
 	fprintf(stderr,
@@ -25,6 +26,7 @@ static void usage(const char *prog)
 		prog);
 }
 
+/* Convert the -l argument into an internal log level. */
 static int parse_level(const char *arg, enum log_level *level)
 {
 	char *end;
@@ -33,6 +35,7 @@ static int parse_level(const char *arg, enum log_level *level)
 	errno = 0;
 	value = strtol(arg, &end, 10);
 
+	/* Reject invalid or out-of-range values. */
 	if (errno != 0 || end == arg || *end != '\0')
 		return -1;
 	if (value < LOG_LEVEL_ERROR || value > LOG_LEVEL_DEBUG)
@@ -42,22 +45,29 @@ static int parse_level(const char *arg, enum log_level *level)
 	return 0;
 }
 
+/*
+ * Resolve the logging destination.
+ * Relative file paths are converted to absolute paths before daemonization.
+ */
 static int resolve_log_path(const char *input, char *output, size_t size)
 {
 	char cwd[PATH_MAX];
 
+	/* Keep the special syslog backend unchanged. */
 	if (strcmp(input, "syslog") == 0) {
 		if (snprintf(output, size, "%s", input) >= (int)size)
 			return -1;
 		return 0;
 	}
 
+	/* Absolute paths require no further processing. */
 	if (input[0] == '/') {
 		if (snprintf(output, size, "%s", input) >= (int)size)
 			return -1;
 		return 0;
 	}
 
+	/* Convert relative paths before the daemon switches to "/". */
 	if (getcwd(cwd, sizeof(cwd)) == NULL)
 		return -1;
 	if (snprintf(output, size, "%s/%s", cwd, input) >= (int)size)
@@ -72,6 +82,7 @@ int main(int argc, char *argv[])
 	enum log_level log_level = DEFAULT_LOG_LEVEL;
 	int opt;
 
+	/* Parse command-line options. */
 	while ((opt = getopt(argc, argv, "o:l:")) != -1) {
 		switch (opt) {
 		case 'o':
@@ -93,6 +104,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* Reject unexpected positional arguments. */
 	if (optind < argc) {
 		fprintf(stderr, "Unexpected argument: %s\n", argv[optind]);
 		usage(argv[0]);
@@ -112,6 +124,7 @@ int main(int argc, char *argv[])
 
 	log_info("Daemon started (level=%d)", log_level);
 
+	/* Wait for signals until shutdown is requested. */
 	while (!signals_shutdown_requested()) {
 		pause();
 

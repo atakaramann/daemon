@@ -19,9 +19,9 @@ enum log_backend {
 /* Global logger state. */
 static struct {
 	enum log_backend backend;	/* active logging backend. */
-	enum log_level   level;      /* threshold from -l */
-	FILE            *fp;         /* file backend only */
-	char             path[PATH_MAX]; /* absolute path, kept for reopen() */
+	enum log_level   level;		/* threshold from -l */
+	FILE            *fp;		/* file backend only */
+	char             path[PATH_MAX];		/* absolute path, kept for reopen() */
 } logger;
 
 /* Map internal log levels to syslog priorities. */
