@@ -3,4 +3,4 @@
 
 int become_daemon(void);        /* Returns 0 on success, -1 on error */
 
-#endif
+#endif /* DAEMONIZE_H */
