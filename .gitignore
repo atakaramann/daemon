@@ -1,0 +1,28 @@
+# Build artifacts
+*.o
+*.a
+*.so
+/batd
+
+# Tools (run locally, not part of the source tree)
+checkpatch.pl
+spelling.txt
+const_structs.checkpatch
+
+# Debug / analysis
+core
+core.*
+*.gcno
+*.gcda
+vgcore.*
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

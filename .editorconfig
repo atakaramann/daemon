@@ -1,8 +1,17 @@
+# https://editorconfig.org
+# Linux kernel coding style: 8-wide hard tabs, LF, trimmed trailing space.
 root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+charset = utf-8
 
 [*.{c,h}]
 indent_style = tab
 indent_size = 8
 max_line_length = 80
-trim_trailing_whitespace = true
-insert_final_newline = true
+
+[Makefile]
+indent_style = tab
