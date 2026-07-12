@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: MIT */
-#ifndef DAEMONIZE_H             /* Prevent double inclusion */
+#ifndef DAEMONIZE_H
 #define DAEMONIZE_H
 
-int become_daemon(void);        /* Returns 0 on success, -1 on error */
+/* Turn the caller into a daemon. */
+int become_daemon(void);
 
 #endif /* DAEMONIZE_H */

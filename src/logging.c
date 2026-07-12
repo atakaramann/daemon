@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 #define _GNU_SOURCE
 
-#include "logging.h"
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,40 +9,44 @@
 #include <syslog.h>
 #include <limits.h>
 
+#include "logging.h"
+
 enum log_backend {
 	BACKEND_SYSLOG,
 	BACKEND_FILE,
 };
 
+/* Global logger state. */
 static struct {
-	enum log_backend backend;
+	enum log_backend backend;	/* active logging backend. */
 	enum log_level   level;      /* threshold from -l */
 	FILE            *fp;         /* file backend only */
 	char             path[PATH_MAX]; /* absolute path, kept for reopen() */
 } logger;
 
+/* Map internal log levels to syslog priorities. */
 static const int syslog_priority[] = {
 	[LOG_LEVEL_ERROR] = LOG_ERR,
 	[LOG_LEVEL_INFO]  = LOG_INFO,
 	[LOG_LEVEL_DEBUG] = LOG_DEBUG,
 };
 
-/* Human-readable tag for the file backend. */
+/* Human-readable tags for the file backend. */
 static const char *level_name[] = {
 	[LOG_LEVEL_ERROR] = "ERROR",
 	[LOG_LEVEL_INFO]  = "INFO",
 	[LOG_LEVEL_DEBUG] = "DEBUG",
 };
 
+/* Check whether this message should be logged. */
 static bool should_log(enum log_level level)
 {
 	return level <= logger.level;
 }
 
+/* Open the log file for append; rotation must never truncate it. */
 static int open_file(void)
 {
-	/* Append, never truncate: on reopen()/rotation we must not wipe an
-	 * existing log. */
 	logger.fp = fopen(logger.path, "a");
 	if (logger.fp == NULL)
 		return -1;
@@ -52,6 +54,7 @@ static int open_file(void)
 	return 0;
 }
 
+/* Initialize the logging backend. */
 int logger_init(const char *dest, enum log_level level)
 {
 	int n;
@@ -66,9 +69,7 @@ int logger_init(const char *dest, enum log_level level)
 
 	logger.backend = BACKEND_FILE;
 
-	/* snprintf both copies and null-terminates; a return >= size means
-	 * the path was too long and got truncated, which we reject rather
-	 * than log to the wrong file. */
+	/* Save the path for future reopen requests. */
 	n = snprintf(logger.path, sizeof(logger.path), "%s", dest);
 	if (n < 0 || (size_t)n >= sizeof(logger.path))
 		return -1;
@@ -76,39 +77,36 @@ int logger_init(const char *dest, enum log_level level)
 	return open_file();
 }
 
+/* File backend: add the timestamp, level and pid to each log line. */
 static void write_file(enum log_level level, const char *fmt, va_list ap)
 {
 	char      ts[32];
 	time_t    now = time(NULL);
 	struct tm tm;
 
-	/* localtime_r: thread-safe variant, honest about a firewall daemon
-	 * possibly growing threads later. */
+	/* Timestamp; localtime_r stays safe if the daemon grows threads. */
 	localtime_r(&now, &tm);
 	strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm);
 
-	/* We prepend timestamp + level + pid ourselves, because a raw file
-	 * has nobody else to add them (unlike syslogd). */
 	fprintf(logger.fp, "%s [%s] pid=%d: ", ts, level_name[level],
 		(int)getpid());
 	vfprintf(logger.fp, fmt, ap);
 	fputc('\n', logger.fp);
 
-	/* _IOLBF is not guaranteed for regular files, so flush explicitly
-	 * instead of trusting line buffering. */
+	/* Flush buffered output to avoid losing recent log messages. */
 	fflush(logger.fp);
 }
 
+/* Write a log message to the active backend. */
 void logger_write(enum log_level level, const char *fmt, ...)
 {
 	va_list ap;
 
-	/* Guard the table index before anything else: an out-of-range level
-	 * would read past syslog_priority[]/level_name[] (undefined). */
+	/* Reject invalid log levels before indexing the lookup tables. */
 	if (level < LOG_LEVEL_ERROR || level > LOG_LEVEL_DEBUG)
 		return;
 
-	if (!should_log(level))     /* the one gate; both backends respect it */
+	if (!should_log(level))
 		return;
 
 	va_start(ap, fmt);
@@ -121,18 +119,20 @@ void logger_write(enum log_level level, const char *fmt, ...)
 	va_end(ap);
 }
 
+/* Reopen the active log destination. */
 int logger_reopen(void)
 {
-	/* syslog keeps its socket open; there is nothing to rotate. */
+	/* syslog manages its own connection. */
 	if (logger.backend == BACKEND_SYSLOG)
 		return 0;
 
 	if (logger.fp != NULL)
 		fclose(logger.fp);
 
-	return open_file();     /* recreates the file if it was rotated away */
+	return open_file();
 }
 
+/* Flush and release the active backend. */
 void logger_close(void)
 {
 	if (logger.backend == BACKEND_SYSLOG) {

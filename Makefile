@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: MIT
 
+# Compiler.
 CC := gcc
 
 # Build with GNU C11 and treat all warnings as errors.
 CFLAGS := -std=gnu11 -Wall -Wextra -Werror -O2
 
+# Source directory and output binary name.
 SRCDIR := src
 BIN := batd
 
@@ -16,6 +18,7 @@ OBJS := $(SRCS:.c=.o)
 
 .PHONY: all clean
 
+# Default build target.
 all: $(BIN)
 
 # Link all object files into the final executable.

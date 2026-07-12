@@ -11,25 +11,20 @@ enum log_level {
 	LOG_LEVEL_DEBUG = 2,
 };
 
-/*
- * Initialise the logger. 'dest' is either the literal "syslog" or an
- * absolute path (main() resolves relative paths before calling this,
- * since the daemon has already chdir()'d to /). 'level' is the -l
- * threshold. Returns 0 on success, -1 on error.
- */
+/* Initialize the logging backend to syslog or a file. */
 int logger_init(const char *dest, enum log_level level);
 
-/* Core entry point. All messages pass through here (single choke point). */
+/* All log messages pass through this function. */
 void logger_write(enum log_level level, const char *fmt, ...)
 	__attribute__((format(printf, 2, 3)));
 
-/* Reopen the destination (SIGHUP / log rotation). No-op for syslog. */
+/* Reopen the log destination. Does nothing for syslog. */
 int logger_reopen(void);
 
 /* Flush and release the destination. */
 void logger_close(void);
 
-/* Convenience wrappers. Rely on ##__VA_ARGS__ (GNU extension, -std=gnu11). */
+/* Convenience logging macros. */
 #define log_error(...) logger_write(LOG_LEVEL_ERROR, __VA_ARGS__)
 #define log_info(...)  logger_write(LOG_LEVEL_INFO,  __VA_ARGS__)
 #define log_debug(...) logger_write(LOG_LEVEL_DEBUG, __VA_ARGS__)

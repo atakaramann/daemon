@@ -68,9 +68,9 @@ static int resolve_log_path(const char *input, char *output, size_t size)
 
 int main(int argc, char *argv[])
 {
-	char           log_dest[PATH_MAX] = DEFAULT_LOG_DEST;
+	char log_dest[PATH_MAX] = DEFAULT_LOG_DEST;
 	enum log_level log_level = DEFAULT_LOG_LEVEL;
-	int            opt;
+	int opt;
 
 	while ((opt = getopt(argc, argv, "o:l:")) != -1) {
 		switch (opt) {
@@ -93,35 +93,25 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (optind < argc) {
+		fprintf(stderr, "Unexpected argument: %s\n", argv[optind]);
+		usage(argv[0]);
+		return EXIT_FAILURE;
+	}
+
 	if (become_daemon() == -1) {
 		perror("become_daemon");
 		return EXIT_FAILURE;
 	}
 
-	/*
-	 * Install signal handlers before opening the log, so a signal that
-	 * arrives during startup is not lost. There is no terminal and no
-	 * log yet, so a failure here can only exit.
-	 */
 	if (signals_init() == -1)
 		return EXIT_FAILURE;
 
-	/*
-	 * Open the log. openlog()/fopen() run here, after become_daemon()
-	 * has closed the inherited file descriptors.
-	 */
 	if (logger_init(log_dest, log_level) == -1)
 		return EXIT_FAILURE;
 
 	log_info("Daemon started (level=%d)", log_level);
 
-	/*
-	 * Event loop. There is no periodic work, so pause() sleeps at zero
-	 * CPU until a signal arrives. pause() always returns on a caught
-	 * signal, even with SA_RESTART, so we then inspect the flags. All
-	 * real work happens here, never in a handler: fprintf()/vsyslog()
-	 * are not async-signal-safe, so the handlers only set a flag.
-	 */
 	while (!signals_shutdown_requested()) {
 		pause();
 
@@ -129,14 +119,13 @@ int main(int argc, char *argv[])
 			log_info("SIGHUP received, reloading");
 			if (logger_reopen() == -1) {
 				log_error("Failed to reopen log");
-				break;	/* single cleanup point is below */
+				break;
 			}
 			signals_clear_reload_request();
 			log_info("Reload completed");
 		}
 	}
 
-	/* Graceful shutdown: record the exit, then release the log sink. */
 	log_info("Daemon shutting down");
 	logger_close();
 
