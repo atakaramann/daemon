@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #ifndef DAEMONIZE_H             /* Prevent double inclusion */
 #define DAEMONIZE_H
 

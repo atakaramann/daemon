@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT //
+// SPDX-License-Identifier: MIT
 #define _GNU_SOURCE
 
 #include "logging.h"
