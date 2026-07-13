@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,10 +11,50 @@
 
 #include "daemonize.h"
 #include "logging.h"
-#include "signals.h"
 
 #define DEFAULT_LOG_DEST  "syslog"
 #define DEFAULT_LOG_LEVEL LOG_LEVEL_INFO
+
+/* Request flags: written by the handler, polled by the main loop. */
+static volatile sig_atomic_t shutdown_requested;
+static volatile sig_atomic_t reload_requested;
+
+/* Only set flags here; almost nothing else is async-signal-safe. */
+static void signal_handler(int signo)
+{
+	switch (signo) {
+	case SIGTERM:
+	case SIGINT:
+		/* Request a clean shutdown. */
+		shutdown_requested = 1;
+		break;
+	case SIGHUP:
+		/* Request log reopening. */
+		reload_requested = 1;
+		break;
+	}
+}
+
+/* Install the signal handlers used by this daemon. */
+static int signals_init(void)
+{
+	struct sigaction sa;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = signal_handler;
+	sigemptyset(&sa.sa_mask);
+	/* Restart interrupted system calls automatically. */
+	sa.sa_flags = SA_RESTART;
+
+	if (sigaction(SIGTERM, &sa, NULL) == -1)
+		return -1;
+	if (sigaction(SIGINT, &sa, NULL) == -1)
+		return -1;
+	if (sigaction(SIGHUP, &sa, NULL) == -1)
+		return -1;
+
+	return 0;
+}
 
 /* Print command-line usage information. */
 static void usage(const char *prog)
@@ -125,16 +166,16 @@ int main(int argc, char *argv[])
 	log_info("Daemon started (level=%d)", log_level);
 
 	/* Wait for signals until shutdown is requested. */
-	while (!signals_shutdown_requested()) {
+	while (!shutdown_requested) {
 		pause();
 
-		if (signals_reload_requested()) {
+		if (reload_requested) {
 			log_info("SIGHUP received, reloading");
 			if (logger_reopen() == -1) {
 				log_error("Failed to reopen log");
 				break;
 			}
-			signals_clear_reload_request();
+			reload_requested = 0;
 			log_info("Reload completed");
 		}
 	}

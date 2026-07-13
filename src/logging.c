@@ -63,7 +63,7 @@ int logger_init(const char *dest, enum log_level level)
 
 	if (strcmp(dest, "syslog") == 0) {
 		logger.backend = BACKEND_SYSLOG;
-		openlog("bat-daemon", LOG_PID | LOG_CONS, LOG_DAEMON);
+		openlog("daemon", LOG_PID | LOG_CONS, LOG_DAEMON);
 		return 0;
 	}
 

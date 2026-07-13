@@ -8,7 +8,7 @@ CFLAGS := -std=gnu11 -Wall -Wextra -Werror -O2
 
 # Source directory and output binary name.
 SRCDIR := src
-BIN := batd
+BIN := firewalld
 
 # All source files under src/.
 SRCS := $(wildcard $(SRCDIR)/*.c)
