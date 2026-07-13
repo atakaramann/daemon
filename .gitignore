@@ -2,7 +2,7 @@
 *.o
 *.a
 *.so
-/batd
+/firewalld
 
 # Tools (run locally, not part of the source tree)
 checkpatch.pl

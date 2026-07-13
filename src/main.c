@@ -20,9 +20,9 @@ static volatile sig_atomic_t shutdown_requested;
 static volatile sig_atomic_t reload_requested;
 
 /* Only set flags here; almost nothing else is async-signal-safe. */
-static void signal_handler(int signo)
+static void signal_handler(int sig)
 {
-	switch (signo) {
+	switch (sig) {
 	case SIGTERM:
 	case SIGINT:
 		/* Request a clean shutdown. */
@@ -60,8 +60,9 @@ static int signals_init(void)
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [-o <syslog|logfile>] [-l <0|1|2>]\n"
+		"Usage: %s [-h] [-o <syslog|logfile>] [-l <0|1|2>]\n"
 		"\n"
+		"  -h          Show this help message\n"
 		"  -o <dest>   Logging destination (syslog or file path)\n"
 		"  -l <level>  Log level: 0=ERROR, 1=INFO, 2=DEBUG\n",
 		prog);
@@ -124,8 +125,11 @@ int main(int argc, char *argv[])
 	int opt;
 
 	/* Parse command-line options. */
-	while ((opt = getopt(argc, argv, "o:l:")) != -1) {
+	while ((opt = getopt(argc, argv, "ho:l:")) != -1) {
 		switch (opt) {
+		case 'h':
+			usage(argv[0]);
+			return EXIT_SUCCESS;
 		case 'o':
 			if (resolve_log_path(optarg, log_dest,
 					     sizeof(log_dest)) < 0) {
