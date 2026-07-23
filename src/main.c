@@ -167,7 +167,7 @@ int main(int argc, char *argv[])
 	if (logger_init(log_dest, log_level) == -1)
 		return EXIT_FAILURE;
 
-	log_info("Daemon started (level=%d)", log_level);
+	log_info("fwd-Daemon started");
 
 	/* Wait for signals until shutdown is requested. */
 	while (!shutdown_requested) {
