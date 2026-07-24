@@ -42,6 +42,7 @@ static void handle_set_level(const struct fw_request *req,
 	}
 
 	resp->status = FW_STATUS_OK;
+	log_info("log level set to %u", req->level);
 }
 
 void handler_dispatch(const struct fw_request *req, struct fw_response *resp)

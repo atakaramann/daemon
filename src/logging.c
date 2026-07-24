@@ -69,9 +69,6 @@ int logger_set_level(enum log_level level)
 		return -1;
 
 	logger.level = level;
-	logger_write(LOG_LEVEL_ERROR, "log level changed to %s",
-		     	level_name[level]);
-
 	return 0;
 }
 
