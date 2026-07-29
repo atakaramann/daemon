@@ -15,7 +15,8 @@ int logger_reopen(void);
 void logger_close(void);
 
 /* Change the level at runtime (FW_CMD_SET_LEVEL). Returns 0, or -1 if the
- * level is out of range. */
+ * level is out of range.
+ */
 int logger_set_level(enum log_level level);
 
 #define log_error(...) logger_write(LOG_LEVEL_ERROR, __VA_ARGS__)

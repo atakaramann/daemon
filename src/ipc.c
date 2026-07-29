@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+// SPDX-License-Identifier: MIT
 #include "ipc.h"
 
 #include <errno.h>
@@ -8,23 +8,13 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-/*
- * How long the client waits for the daemon's reply. A CLI tool must never
- * hang forever: if the daemon is down (or a stale socket file survives a
- * crash), recv() would otherwise block indefinitely.
- */
+/* Never block forever waiting for a daemon reply. */
 #define CLIENT_TIMEOUT_SECS 3
 
-/* The client's private bound path, remembered so we can unlink it. */
+/* The client's bound path, kept so ipc_client_close can unlink it. */
 static char client_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
 
-/*
- * Fill a sockaddr_un for 'path'. snprintf (not strcpy) both copies and
- * bounds the write, and reports truncation via its return value, so this
- * stays correct even if 'path' ever comes from argv or a config file
- * rather than a compile-time macro. Returns 0, or -1 if the path is too
- * long for sun_path.
- */
+/* snprintf, not strcpy, so an over-long path is rejected, not truncated. */
 static int fill_sockaddr(struct sockaddr_un *addr, const char *path)
 {
 	memset(addr, 0, sizeof(*addr));
@@ -45,8 +35,7 @@ int ipc_server_open(void)
 	if (fd == -1)
 		return -1;
 
-	/* A leftover socket file would make bind() fail with EADDRINUSE, so
-	 * remove it first. ENOENT is fine. */
+	/* Remove a stale socket so bind() does not fail with EADDRINUSE. */
 	if (unlink(FW_SOCKET_PATH) == -1 && errno != ENOENT) {
 		close(fd);
 		return -1;
@@ -62,7 +51,7 @@ int ipc_server_open(void)
 		return -1;
 	}
 
-	/* Firewall control must be root-only: no group/other access. */
+	/* Root-only: firewall control must not be reachable by other users. */
 	if (chmod(FW_SOCKET_PATH, S_IRUSR | S_IWUSR) == -1) {
 		close(fd);
 		unlink(FW_SOCKET_PATH);
@@ -84,8 +73,7 @@ int ipc_client_open(void)
 	if (fd == -1)
 		return -1;
 
-	/* Bind a unique private path so the daemon can reply to us. The pid
-	 * keeps it unique across concurrent CLI invocations. */
+	/* Private path, unique per pid, so the daemon has a reply address. */
 	snprintf(path, sizeof(path), FW_CLIENT_FMT, (long)getpid());
 	if (fill_sockaddr(&addr, path) == -1) {
 		close(fd);
@@ -99,8 +87,10 @@ int ipc_client_open(void)
 	}
 	strcpy(client_path, addr.sun_path);
 
-	/* connect() fixes the peer, enabling send()/recv() and making the
-	 * kernel drop datagrams from anyone but the daemon. */
+	/*
+	 * connect() fixes the peer, enabling send()/recv() and making the
+	 * kernel drop datagrams from anyone but the daemon.
+	 */
 	if (fill_sockaddr(&addr, FW_SOCKET_PATH) == -1) {
 		close(fd);
 		unlink(client_path);

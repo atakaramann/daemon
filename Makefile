@@ -1,34 +1,55 @@
 # SPDX-License-Identifier: MIT
+#
+# Build for the fw firewall: the fwd daemon and its fwctl control client.
+# Both link a shared ipc.o, so the wire protocol lives in exactly one place.
 
-# Compiler.
-CC := gcc
+CC      := gcc
+CFLAGS  := -std=gnu11 -Wall -Wextra -Werror -O2
+SRCDIR  := src
 
-# Build with GNU C11 and treat all warnings as errors.
-CFLAGS := -std=gnu11 -Wall -Wextra -Werror -O2
+DAEMON  := fwd
+CLI     := fwctl
 
-# Source directory and output binary name.
-SRCDIR := src
-BIN := fwd
+# Object files. ipc.o is shared, so it is listed for both binaries and the
+# pattern rule below builds it once.
+DAEMON_OBJS := $(SRCDIR)/main.o \
+               $(SRCDIR)/daemonize.o \
+               $(SRCDIR)/logging.o \
+               $(SRCDIR)/rules.o \
+               $(SRCDIR)/handler.o \
+               $(SRCDIR)/ipc.o
 
-# All source files under src/.
-SRCS := $(wildcard $(SRCDIR)/*.c)
+CLI_OBJS    := $(SRCDIR)/cli.o \
+               $(SRCDIR)/ipc.o
 
-# Matching object files for each source.
-OBJS := $(SRCS:.c=.o)
+# checkpatch.pl is the Linux kernel style checker. It is not part of the
+# source tree (it is a GPL tool fetched separately), so it stays gitignored.
+CHECKPATCH  := ./checkpatch.pl
+CHECK_FLAGS := --no-tree --terse --file
 
-.PHONY: all clean
+.PHONY: all clean check
 
-# Default build target.
-all: $(BIN)
+all: $(DAEMON) $(CLI)
 
-# Link all object files into the final executable.
-$(BIN): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS)
+$(DAEMON): $(DAEMON_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# Compile each source file into its corresponding object file.
-$(SRCDIR)/%.o: $(SRCDIR)/%.c
+$(CLI): $(CLI_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
+
+# Every .o depends on every header: the project is small, so a rebuild on
+# any header change is cheaper than tracking exact dependencies by hand.
+$(SRCDIR)/%.o: $(SRCDIR)/%.c $(wildcard $(SRCDIR)/*.h)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Remove all generated files.
+# Run the kernel style checker over every source file, if it is present.
+check:
+	@if [ -f $(CHECKPATCH) ]; then \
+		$(CHECKPATCH) $(CHECK_FLAGS) $(SRCDIR)/*.c $(SRCDIR)/*.h; \
+	else \
+		echo "checkpatch.pl not found in project root -- skipping"; \
+		echo "get it from the Linux kernel: scripts/checkpatch.pl"; \
+	fi
+
 clean:
-	rm -f $(OBJS) $(BIN)
+	rm -f $(SRCDIR)/*.o $(DAEMON) $(CLI)

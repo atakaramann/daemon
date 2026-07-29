@@ -1,13 +1,11 @@
-/* SPDX-License-Identifier: MIT */
+// SPDX-License-Identifier: MIT
 #include "rules.h"
 
 #include <string.h>
 
 /*
- * Module-global rule set, hidden from the rest of the program. A flat
- * fixed-capacity array with a linear scan is the right size for FW_RULE_MAX
- * entries; a list or hash table would be complexity the task does not
- * need, since the task measures the IPC, not the data structure.
+ * Rules occupy entries [0, count). With at most FW_RULE_MAX entries,
+ * a linear search is sufficient.
  */
 static struct {
 	struct fw_rule rules[FW_RULE_MAX];
@@ -20,8 +18,8 @@ void rules_init(void)
 }
 
 /*
- * Two rules are equal when every match field is equal. We compare fields
- * explicitly rather than memcmp so the result never depends on padding.
+ * We compare fields explicitly rather than memcmp so the result
+ * never depends on padding.
  */
 static int rule_equals(const struct fw_rule *a, const struct fw_rule *b)
 {
@@ -32,6 +30,7 @@ static int rule_equals(const struct fw_rule *a, const struct fw_rule *b)
 	       a->protocol == b->protocol;
 }
 
+/* Returns the matching index, or table.count if no rule matches. */
 static size_t find(const struct fw_rule *r)
 {
 	size_t i;
@@ -40,7 +39,7 @@ static size_t find(const struct fw_rule *r)
 		if (rule_equals(&table.rules[i], r))
 			return i;
 
-	return table.count;	/* not found */
+	return table.count;
 }
 
 enum fw_status rules_add(const struct fw_rule *rule)
@@ -61,8 +60,10 @@ enum fw_status rules_del(const struct fw_rule *rule)
 	if (i == table.count)
 		return FW_STATUS_NOT_FOUND;
 
-	/* Fill the gap with the last element: order is irrelevant for a
-	 * match set, so this deletes in O(1) after the find. */
+	/*
+	 * Rule order is irrelevant. Fill the hole with the last rule instead of
+	 * shifting the remaining entries.
+	 */
 	table.rules[i] = table.rules[--table.count];
 	return FW_STATUS_OK;
 }

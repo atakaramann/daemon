@@ -20,12 +20,12 @@ static void usage(const char *prog)
 		"  %s -D \"SRC_IP:DST_IP:SPORT:DPORT:PROTO\"   delete a rule\n"
 		"  %s -d                                       list all rules\n"
 		"  %s -l <0|1|2>                               set log level\n"
+		"  %s -h                                       show this help\n"
 		"\n"
 		"PROTO is tcp or udp.\n",
-		prog, prog, prog, prog);
+		prog, prog, prog, prog, prog);
 }
 
-/* Map a protocol name to its IPPROTO_* value. */
 static int parse_protocol(const char *str, uint8_t *proto)
 {
 	if (strcmp(str, "tcp") == 0) {
@@ -39,8 +39,7 @@ static int parse_protocol(const char *str, uint8_t *proto)
 	return -1;
 }
 
-/* Parse a decimal port (0..65535). strtol, not atoi, so junk and
- * out-of-range values are rejected instead of silently truncated. */
+/* strtol, not atoi, so junk and out-of-range values are rejected. */
 static int parse_port(const char *str, uint16_t *port)
 {
 	char *end;
@@ -48,7 +47,7 @@ static int parse_port(const char *str, uint16_t *port)
 
 	errno = 0;
 	v = strtol(str, &end, 10);
-	if (errno != 0 || end == str || *end != '\0' || v < 0 || v > 65535)
+	if (errno != 0 || end == str || *end != '\0' || v < 0 || v > UINT16_MAX)
 		return -1;
 
 	*port = (uint16_t)v;
@@ -56,43 +55,42 @@ static int parse_port(const char *str, uint16_t *port)
 }
 
 /*
- * Parse "SRC_IP:DST_IP:SPORT:DPORT:PROTO" into a fw_rule. All parsing and
- * validation happens on the client, the side with a terminal to report
- * errors to. IPs are kept in network byte order: inet_pton produces that
- * directly and inet_ntop consumes it, so no ntoh/hton is needed here.
+ * Parse "SRC_IP:DST_IP:SPORT:DPORT:PROTO" into a fw_rule. IPs go in via
+ * inet_pton, which already produces network byte order.
  */
 static int parse_rule(const char *text, struct fw_rule *rule)
 {
 	char *copy;
-	char *tok, *save;
+	char *token, *save;
 
 	memset(rule, 0, sizeof(*rule));
 
+	/* strtok_r writes into its input, so work on a copy of argv. */
 	copy = strdup(text);
 	if (copy == NULL)
 		return -1;
 
-	tok = strtok_r(copy, ":", &save);
-	if (tok == NULL || inet_pton(AF_INET, tok, &rule->src_ip) != 1)
+	token = strtok_r(copy, ":", &save);
+	if (token == NULL || inet_pton(AF_INET, token, &rule->src_ip) != 1)
 		goto fail;
 
-	tok = strtok_r(NULL, ":", &save);
-	if (tok == NULL || inet_pton(AF_INET, tok, &rule->dst_ip) != 1)
+	token = strtok_r(NULL, ":", &save);
+	if (token == NULL || inet_pton(AF_INET, token, &rule->dst_ip) != 1)
 		goto fail;
 
-	tok = strtok_r(NULL, ":", &save);
-	if (tok == NULL || parse_port(tok, &rule->src_port) == -1)
+	token = strtok_r(NULL, ":", &save);
+	if (token == NULL || parse_port(token, &rule->src_port) == -1)
 		goto fail;
 
-	tok = strtok_r(NULL, ":", &save);
-	if (tok == NULL || parse_port(tok, &rule->dst_port) == -1)
+	token = strtok_r(NULL, ":", &save);
+	if (token == NULL || parse_port(token, &rule->dst_port) == -1)
 		goto fail;
 
-	tok = strtok_r(NULL, ":", &save);
-	if (tok == NULL || parse_protocol(tok, &rule->protocol) == -1)
+	token = strtok_r(NULL, ":", &save);
+	if (token == NULL || parse_protocol(token, &rule->protocol) == -1)
 		goto fail;
 
-	/* Reject trailing junk: there must be no sixth field. */
+	/* There must be no sixth field. */
 	if (strtok_r(NULL, ":", &save) != NULL)
 		goto fail;
 
@@ -150,62 +148,102 @@ static void print_rules(const struct fw_response *resp)
 	}
 }
 
-/* Build the request from argv. Returns 0 on success, -1 on usage error. */
+/* argv -> request. Returns 0, 1 for -h (nothing to send), -1 on error. */
 static int build_request(int argc, char *argv[], struct fw_request *req)
 {
 	int opt;
+	int commands = 0;
 
 	memset(req, 0, sizeof(*req));
 
-	opt = getopt(argc, argv, "A:D:dl:");
-	if (opt == -1)
-		return -1;
+	while ((opt = getopt(argc, argv, "A:D:dl:h")) != -1) {
+		if (opt == 'h')		/* -h is a help request, not a command */
+			return 1;
 
-	switch (opt) {
-	case 'A':
-		req->cmd = FW_CMD_ADD_RULE;
-		if (parse_rule(optarg, &req->rule) == -1) {
-			fprintf(stderr, "Invalid rule: %s\n", optarg);
-			return -1;
-		}
-		break;
-	case 'D':
-		req->cmd = FW_CMD_DEL_RULE;
-		if (parse_rule(optarg, &req->rule) == -1) {
-			fprintf(stderr, "Invalid rule: %s\n", optarg);
-			return -1;
-		}
-		break;
-	case 'd':
-		req->cmd = FW_CMD_LIST_RULES;
-		break;
-	case 'l': {
-		char *end;
-		long  v;
+		commands++;
 
-		errno = 0;
-		v = strtol(optarg, &end, 10);
-		if (errno != 0 || end == optarg || *end != '\0' ||
-		    v < LOG_LEVEL_ERROR || v > LOG_LEVEL_DEBUG) {
-			fprintf(stderr, "Invalid level: %s\n", optarg);
+		switch (opt) {
+		case 'A':
+			req->cmd = FW_CMD_ADD_RULE;
+			if (parse_rule(optarg, &req->rule) == -1) {
+				fprintf(stderr, "%s: invalid rule: %s\n", argv[0], optarg);
+				return -1;
+			}
+			break;
+		case 'D':
+			req->cmd = FW_CMD_DEL_RULE;
+			if (parse_rule(optarg, &req->rule) == -1) {
+				fprintf(stderr, "%s: invalid rule: %s\n", argv[0], optarg);
+				return -1;
+			}
+			break;
+		case 'd':
+			req->cmd = FW_CMD_LIST_RULES;
+			break;
+		case 'l': {
+			char *end;
+			long  v;
+
+			errno = 0;
+			v = strtol(optarg, &end, 10);
+			if (errno != 0 || end == optarg || *end != '\0' ||
+			    v < LOG_LEVEL_ERROR || v > LOG_LEVEL_DEBUG) {
+				fprintf(stderr, "%s: invalid level: %s\n", argv[0], optarg);
+				return -1;
+			}
+			req->cmd = FW_CMD_SET_LEVEL;
+			req->level = (uint32_t)v;
+			break;
+		}
+		default:
 			return -1;
 		}
-		req->cmd = FW_CMD_SET_LEVEL;
-		req->level = (uint32_t)v;
-		break;
 	}
-	default:
+
+	/* Exactly one command, and no leftover positional arguments. */
+	if (commands != 1 || optind < argc)
+		return -1;
+
+	return 0;
+}
+
+/*
+ * Open a connection, send req, receive resp, close. Returns 0 on success
+ * or -1 with a message already printed to stderr.
+ */
+static int transact(const char *prog, const struct fw_request *req,
+		    struct fw_response *resp)
+{
+	int fd;
+
+	fd = ipc_client_open();
+	if (fd == -1) {
+		if (errno == ECONNREFUSED)
+			fprintf(stderr, "%s: daemon is not running\n", prog);
+		else
+			fprintf(stderr, "%s: cannot reach daemon: %s\n",
+				prog, strerror(errno));
 		return -1;
 	}
 
-	/* One command per invocation: reject a second option. */
-	if (getopt(argc, argv, "A:D:dl:") != -1)
+	if (ipc_client_send(fd, req) == -1) {
+		fprintf(stderr, "%s: send failed: %s\n", prog, strerror(errno));
+		ipc_client_close(fd);
 		return -1;
+	}
 
-	/* Reject leftover non-option arguments, e.g. "fwctl -d junk". */
-	if (optind < argc)
+	if (ipc_client_recv(fd, resp) == -1) {
+		/* SO_RCVTIMEO expiry shows up as EAGAIN/EWOULDBLOCK. */
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			fprintf(stderr, "%s: daemon did not respond\n", prog);
+		else
+			fprintf(stderr, "%s: no reply: %s\n",
+				prog, strerror(errno));
+		ipc_client_close(fd);
 		return -1;
+	}
 
+	ipc_client_close(fd);
 	return 0;
 }
 
@@ -213,42 +251,29 @@ int main(int argc, char *argv[])
 {
 	struct fw_request  req;
 	struct fw_response resp;
-	int                fd;
+	int                r;
 
-	if (build_request(argc, argv, &req) == -1) {
+	r = build_request(argc, argv, &req);
+	if (r == 1) {			/* -h */
+		usage(argv[0]);
+		return EXIT_SUCCESS;
+	}
+	if (r == -1) {
 		usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	fd = ipc_client_open();
-	if (fd == -1) {
-		fprintf(stderr, "Cannot reach daemon (is fwd running?): %s\n",
-			strerror(errno));
+	if (transact(argv[0], &req, &resp) == -1)
+		return EXIT_FAILURE;
+
+	if (resp.status != FW_STATUS_OK) {
+		fprintf(stderr, "%s: %s\n", argv[0], fw_status_str(resp.status));
 		return EXIT_FAILURE;
 	}
 
-	if (ipc_client_send(fd, &req) == -1) {
-		fprintf(stderr, "send failed: %s\n", strerror(errno));
-		ipc_client_close(fd);
-		return EXIT_FAILURE;
-	}
-
-	if (ipc_client_recv(fd, &resp) == -1) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			fprintf(stderr,
-				"daemon did not respond (is fwd running?)\n");
-		else
-			fprintf(stderr, "no reply: %s\n", strerror(errno));
-		ipc_client_close(fd);
-		return EXIT_FAILURE;
-	}
-
-	ipc_client_close(fd);
-
+	/* Success is silent except for LIST, which is all output. */
 	if (req.cmd == FW_CMD_LIST_RULES)
 		print_rules(&resp);
-	else
-		printf("%s\n", fw_status_str(resp.status));
 
-	return (resp.status == FW_STATUS_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
+	return EXIT_SUCCESS;
 }

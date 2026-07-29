@@ -123,21 +123,31 @@ static int resolve_log_path(const char *input, char *output, size_t size)
 	return 0;
 }
 
-/* Receive one request, dispatch it, and reply to the sender. */
+/*
+ * Process one IPC request from the control socket.
+ * The request is received, dispatched to the business logic, then the
+ * reply is sent back to the originating client.
+ */
 static void serve_one(int fd)
 {
 	struct fw_request  req;
 	struct fw_response resp;
 	struct sockaddr_un from;
 	socklen_t          fromlen;
- 
+
 	if (ipc_server_recv(fd, &req, &from, &fromlen) == -1) {
+		/*
+		 * A signal may interrupt recvfrom().
+		 * The main loop will notice the pending signal on the next iteration,
+		 * so treat EINTR as a normal wake-up rather than an error.
+		 */
+		if (errno != EINTR)
 			log_error("recv failed: %s", strerror(errno));
 		return;
 	}
- 
+
 	handler_dispatch(&req, &resp);
- 
+
 	if (ipc_server_send(fd, &resp, &from, fromlen) == -1)
 		log_error("reply failed: %s", strerror(errno));
 }
@@ -149,7 +159,7 @@ int main(int argc, char *argv[])
 	struct pollfd     pfd;
 	int               sock;
 	int               opt;
- 
+
 
 	/* Parse command-line options. */
 	while ((opt = getopt(argc, argv, "ho:l:")) != -1) {
@@ -191,21 +201,22 @@ int main(int argc, char *argv[])
 	if (signals_init() == -1)
 		return EXIT_FAILURE;
 
-	if (logger_init(log_dest, log_level) == -1) {
+	if (logger_init(log_dest, log_level) == -1)
 		return EXIT_FAILURE;
-	}
 
+	/* Create the daemon's control socket. */
 	sock = ipc_server_open();
 	if (sock == -1) {
 		log_error("failed to open control socket");
 		logger_close();
 		return EXIT_FAILURE;
 	}
- 
+
+	/* Start with an empty rule table. */
 	rules_init();
 	log_info("fwd started (level=%d), listening on %s",
 		 log_level, FW_SOCKET_PATH);
- 
+
 	pfd.fd = sock;
 	pfd.events = POLLIN;
 
@@ -217,25 +228,27 @@ int main(int argc, char *argv[])
 			if (logger_reopen() == -1)
 				log_error("log reopen failed");
 		}
- 
+
 		if (poll(&pfd, 1, -1) == -1) {
 			if (errno == EINTR)
 				continue;	/* signal: re-check flags */
 			log_error("poll failed: %s", strerror(errno));
 			break;
 		}
- 
-		/* A broken control socket would otherwise spin the loop: poll
-		 * keeps returning immediately with no POLLIN to act on. */
+
+		/*
+		 * A broken control socket would otherwise spin the loop: poll
+		 * keeps returning immediately with no POLLIN to act on.
+		 */
 		if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
 			log_error("control socket failure");
 			break;
 		}
- 
+
 		if (pfd.revents & POLLIN)
 			serve_one(sock);
 	}
- 
+
 	log_info("fwd shutting down");
 	ipc_server_close(sock);
 	logger_close();
