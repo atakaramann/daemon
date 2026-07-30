@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
 	/* Create the daemon's control socket. */
 	sock = ipc_server_open();
 	if (sock == -1) {
-		log_error("failed to open control socket");
+		log_error("failed to open control socket: %s", strerror(errno));
 		logger_close();
 		return EXIT_FAILURE;
 	}

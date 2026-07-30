@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+#include "fw_uapi.h"
+
 /*
  * Wire protocol shared by fwd (daemon) and fwctl (client), exchanged over
  * an AF_UNIX SOCK_DGRAM socket: one request per datagram, one reply per
@@ -11,13 +13,10 @@
  */
 
 /* Daemon's control socket; filesystem path so it can be chmod'd 0600. */
-#define FW_SOCKET_PATH  "/run/fwd.sock"
+#define FW_SOCKET_PATH  "/tmp/fwd.sock"
 
 /* Template for the client's private reply socket. */
 #define FW_CLIENT_FMT   "/tmp/fwctl.%ld"
-
-/* Rule capacity; also bounds a LIST reply to one datagram. */
-#define FW_RULE_MAX  128
 
 /*
  * Part of the wire protocol: SET_LEVEL carries one of these values in
@@ -45,20 +44,6 @@ enum fw_status {
 	FW_STATUS_DUPLICATE = 3,
 	FW_STATUS_NOT_FOUND = 4,
 	FW_STATUS_BAD_MSG   = 5,
-};
-
-/*
- * A rule: IP1:IP2:sport:dport:protocol. IPs are in network byte order
- * (as inet_pton/inet_ntop use them); ports are host order. protocol is
- * an IPPROTO_* value.
- */
-struct fw_rule {
-	uint32_t src_ip;
-	uint32_t dst_ip;
-	uint16_t src_port;
-	uint16_t dst_port;
-	uint8_t  protocol;
-	uint8_t  _pad[3];	/* explicit padding, zeroed for a stable layout */
 };
 
 /* cmd determines which union member is valid. */

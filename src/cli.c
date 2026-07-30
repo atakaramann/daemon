@@ -121,7 +121,7 @@ static const char *fw_proto_str(uint8_t proto)
 		return "tcp";
 	if (proto == IPPROTO_UDP)
 		return "udp";
-	return "?";
+	return "unknown";
 }
 
 static void print_rules(const struct fw_response *resp)
@@ -156,7 +156,7 @@ static int build_request(int argc, char *argv[], struct fw_request *req)
 
 	memset(req, 0, sizeof(*req));
 
-	while ((opt = getopt(argc, argv, "A:D:dl:h")) != -1) {
+	while ((opt = getopt(argc, argv, "A:D:l:dh")) != -1) {
 		if (opt == 'h')		/* -h is a help request, not a command */
 			return 1;
 

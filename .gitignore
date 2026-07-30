@@ -1,8 +1,23 @@
-# Build artifacts
+# Userspace build artifacts
 *.o
 *.a
 *.so
-/firewalld
+/src/fwd
+/src/fwctl
+
+# Kernel module build artifacts (produced by kbuild)
+*.ko
+*.ko.*
+*.mod
+*.mod.c
+*.mod.o
+*.cmd
+.*.cmd
+*.symvers
+modules.order
+.module-common.o
+.tmp_versions/
+.cache.mk
 
 # Tools (run locally, not part of the source tree)
 checkpatch.pl
