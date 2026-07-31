@@ -3,6 +3,8 @@
 #define HANDLER_H
 
 #include "protocol.h"
+#include "logging.h"
+#include "rules.h"
 
 /*
  * Execute one request and populate the response. Command handlers update

@@ -3,9 +3,6 @@
 
 #include <string.h>
 
-#include "logging.h"
-#include "rules.h"
-
 /*
  * One helper per command keeps handler_dispatch() focused on routing.
  * Each helper implements a single command and records the operation in
@@ -71,4 +68,9 @@ void handler_dispatch(const struct fw_request *req, struct fw_response *resp)
 		log_error("unknown command %u", req->cmd);
 		break;
 	}
+
+	/* Push the new rule set to the kernel only when it actually changed. */
+	if (resp->status == FW_STATUS_OK &&
+		(req->cmd == FW_CMD_ADD_RULE || req->cmd == FW_CMD_DEL_RULE))
+		kernel_sync();
 }
