@@ -23,8 +23,10 @@ static struct fw_ruleset __rcu *fw_rules;
 static bool rule_matches(const struct fw_rule *r, __be32 src, __be32 dst,
 			 __be16 sport, __be16 dport, u8 proto)
 {
-	return r->src_ip == src && r->dst_ip == dst &&
-	       r->src_port == sport && r->dst_port == dport &&
+	return r->src_ip == src &&
+		   r->dst_ip == dst &&
+	       r->src_port == sport && 
+		   r->dst_port == dport &&
 	       r->protocol == proto;
 }
 
@@ -32,7 +34,7 @@ static bool rule_matches(const struct fw_rule *r, __be32 src, __be32 dst,
  * Core verdict. Extracts the 5-tuple, then scans the rule set: first match
  * drops (blocklist). TCP/UDP only; anything else is accepted.
  */
-static unsigned int fw_filter_verdict(struct sk_buff *skb)
+static unsigned int fw_packet_verdict(struct sk_buff *skb)
 {
 	const struct fw_ruleset *rules;
 	const struct iphdr *iph;
@@ -46,14 +48,14 @@ static unsigned int fw_filter_verdict(struct sk_buff *skb)
 
 	if (iph->protocol == IPPROTO_TCP) {
 		const struct tcphdr *th = tcp_hdr(skb);
-
 		sport = th->source;
 		dport = th->dest;
+
 	} else if (iph->protocol == IPPROTO_UDP) {
 		const struct udphdr *uh = udp_hdr(skb);
-
 		sport = uh->source;
 		dport = uh->dest;
+
 	} else {
 		return NF_ACCEPT;
 	}
@@ -78,13 +80,7 @@ static unsigned int fw_filter_verdict(struct sk_buff *skb)
 static unsigned int fw_hook_in(void *priv, struct sk_buff *skb,
 			       const struct nf_hook_state *state)
 {
-	return fw_filter_verdict(skb);
-}
-
-static unsigned int fw_hook_out(void *priv, struct sk_buff *skb,
-				const struct nf_hook_state *state)
-{
-	return fw_filter_verdict(skb);
+	return fw_packet_verdict(skb);
 }
 
 static const struct nf_hook_ops fw_hooks[] = {
@@ -92,12 +88,6 @@ static const struct nf_hook_ops fw_hooks[] = {
 		.hook		= fw_hook_in,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_IN,
-		.priority	= NF_IP_PRI_FIRST,
-	},
-	{
-		.hook		= fw_hook_out,
-		.pf		= NFPROTO_IPV4,
-		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_FIRST,
 	},
 };
@@ -137,5 +127,6 @@ void fw_filter_exit(void)
 
 	/* Hooks are gone, so no RCU readers remain; free directly. */
 	old = rcu_dereference_protected(fw_rules, true);
+	rcu_assign_pointer(fw_rules, NULL);
 	kfree(old);
 }

@@ -14,25 +14,24 @@
 static long fw_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct fw_ruleset *set;
-	int ret;
+	int ret = 0;
 
-	switch (cmd) {
-	case FW_IOC_SET_RULES:
-		set = kmalloc(sizeof(*set), GFP_KERNEL);
-		if (!set)
-			return -ENOMEM;
-
-		if (copy_from_user(set, (void __user *)arg, sizeof(*set))) {
-			kfree(set);
-			return -EFAULT;
-		}
-
-		ret = fw_rules_set(set);
-		kfree(set);
-		return ret;
-	default:
+	if (cmd != FW_IOC_SET_RULES)
 		return -ENOTTY;
+
+	set = kmalloc(sizeof(*set), GFP_KERNEL);
+	if (!set)
+		return -ENOMEM;
+
+	if (copy_from_user(set, (void __user *)arg, sizeof(*set))) {
+		ret = -EFAULT;
+		goto out;
 	}
+
+	ret = fw_rules_set(set);
+out:
+	kfree(set);
+	return ret;
 }
 
 static const struct file_operations fw_fops = {
@@ -49,7 +48,15 @@ static struct miscdevice fw_misc = {
 
 static int __init fw_init(void)
 {
-	int ret;
+	int ret = 0;
+
+	/*
+	 * The rule layout is shared with userspace over ioctl, so its size
+	 * and padding must be exactly what both sides expect.
+	 */
+	BUILD_BUG_ON(sizeof(struct fw_rule) != 16);
+	BUILD_BUG_ON(sizeof(struct fw_ruleset) !=
+		     sizeof(__u32) + FW_RULE_MAX * sizeof(struct fw_rule));
 
 	ret = misc_register(&fw_misc);
 	if (ret) {
