@@ -13,6 +13,7 @@
 #include "daemonize.h"
 #include "handler.h"
 #include "ipc.h"
+#include "kernel.h"
 #include "logging.h"
 #include "protocol.h"
 #include "rules.h"
@@ -214,12 +215,17 @@ int main(int argc, char *argv[])
 
 	/* Start with an empty rule table. */
 	rules_init();
+
+	if (kernel_open() == -1)
+		log_info("kernel module not available, packet filtering disabled");
+	else if (kernel_sync() == -1)
+		log_error("initial rule sync to kernel failed");
+
 	log_info("fwd started (level=%d), listening on %s",
 		 log_level, FW_SOCKET_PATH);
 
 	pfd.fd = sock;
 	pfd.events = POLLIN;
-
 
 	while (!shutdown_requested) {
 		if (reload_requested) {
@@ -250,6 +256,7 @@ int main(int argc, char *argv[])
 	}
 
 	log_info("fwd shutting down");
+	kernel_close();
 	ipc_server_close(sock);
 	logger_close();
 

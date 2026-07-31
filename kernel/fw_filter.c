@@ -25,7 +25,7 @@ static bool rule_matches(const struct fw_rule *r, __be32 src, __be32 dst,
 {
 	return r->src_ip == src &&
 		   r->dst_ip == dst &&
-	       r->src_port == sport && 
+	       r->src_port == sport &&
 		   r->dst_port == dport &&
 	       r->protocol == proto;
 }
@@ -48,14 +48,14 @@ static unsigned int fw_packet_verdict(struct sk_buff *skb)
 
 	if (iph->protocol == IPPROTO_TCP) {
 		const struct tcphdr *th = tcp_hdr(skb);
+
 		sport = th->source;
 		dport = th->dest;
-
 	} else if (iph->protocol == IPPROTO_UDP) {
 		const struct udphdr *uh = udp_hdr(skb);
+		
 		sport = uh->source;
 		dport = uh->dest;
-
 	} else {
 		return NF_ACCEPT;
 	}
@@ -130,3 +130,4 @@ void fw_filter_exit(void)
 	rcu_assign_pointer(fw_rules, NULL);
 	kfree(old);
 }
+
