@@ -50,7 +50,7 @@ static int parse_port(const char *str, uint16_t *port)
 	if (errno != 0 || end == str || *end != '\0' || v < 0 || v > UINT16_MAX)
 		return -1;
 
-	*port = (uint16_t)v;
+	*port = htons((uint16_t)v);   // network byte order
 	return 0;
 }
 
@@ -143,7 +143,7 @@ static void print_rules(const struct fw_response *resp)
 		inet_ntop(AF_INET, &r->dst_ip, dst, sizeof(dst));
 
 		printf("%-15s %-15s %-6u %-6u %s\n",
-		       src, dst, r->src_port, r->dst_port,
+		       src, dst, ntohs(r->src_port), ntohs(r->dst_port),
 		       fw_proto_str(r->protocol));
 	}
 }
