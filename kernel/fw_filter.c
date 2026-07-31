@@ -53,7 +53,7 @@ static unsigned int fw_packet_verdict(struct sk_buff *skb)
 		dport = th->dest;
 	} else if (iph->protocol == IPPROTO_UDP) {
 		const struct udphdr *uh = udp_hdr(skb);
-		
+
 		sport = uh->source;
 		dport = uh->dest;
 	} else {
